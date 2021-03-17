@@ -1,0 +1,14 @@
+we need to replace the missing data with averages
+
+we are going to build decision tree so we need to turn "ever_married, 
+work_type, 
+residence_type,
+smoking status" to
+ numerical values
+
+smoking data has a lot of blanks
+
+
+we can make decision trees to apply over
+
+we could do pca and then do  
