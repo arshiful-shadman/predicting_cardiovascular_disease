@@ -1,0 +1,297 @@
+---
+title: "PCA and PCR"
+author: "Arshiful I Shadman"
+date: "16 Nov 2019"
+output:
+  html_document:
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+knitr::opts_chunk$set(warning = F, results = T, message = F)
+# knitr::opts_chunk$set(echo = TRUE)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# ‘scipen’: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than ‘scipen’ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r basicfcn, include=FALSE}
+# can add quietly=T option to the require() function
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+```
+
+
+
+
+
+```{r PCA_PCR_xform_fcns, include=FALSE}
+# Helper function
+# I have written a couple of functions to conveniently handle the PCA/PCR components. You will still need to understand the #concepts to apply them accordingly. They are PCAxform(df, z), and PCRxform(df, y, z). The z-option is T/F, where you want to use #z-scaled applied to the variables. For PCR, the y-variable needs to be specified, either by index or the variable name.
+
+PCAxform <- function(df, z=TRUE) { 
+  #' Obtain the dataframe with the Principal Components after the rotation. 
+  #' ELo 201911 GWU DATS
+  #' @param df The dataframe.
+  #' @param z T/F or 0/1 for z-score to be used
+  #' @return The transformed dataframe.
+  #' @examples
+  #' tmp = PCAxform(USArrests,TRUE)
+
+  z = ifelse(z==TRUE || z=="true" || z=="True" || z=="T" || z=="t" || z==1 || z=="1", TRUE, FALSE) # standardize z 
+  if(z) { df = data.frame(scale(df))}  # scale not safe for non-numeric colunms, but PCA requires all variables numerics to begin with.
+  nmax = length(df)
+  pr.out = prcomp(df,scale=z)
+  df1 = data.frame( as.matrix(df) %*% pr.out$rotation ) # use matrix multiplication in R:  %*% 
+  return(df1)
+}
+# Sample 
+# USArrests.z.pc = PCAxform(USArrests,TRUE)
+# summary(USArrests.z.pc)
+
+# To-be-implemented: for z=TRUE, it will be better to have the z-scaling option for x-vars and y separately. It is actually convenient keep y in original units.
+PCRxform <- function(df, y, z=TRUE) { 
+  #' Obtain the dataframe with the Principal Components after the rotation for PCRegression. Requires related function PCAxform()
+  #' ELo 201903 GWU DATS
+  #' @param df The dataframe.
+  #' @param y The y-variable column index number(int), or the name of y-variable
+  #' @param z T/F or 0/1 for z-score used
+  #' @return The transformed dataframe.
+  #' @examples
+  #' tmp = PCAxform(USArrests,TRUE)
+
+  z = ifelse(z==TRUE || z=="true" || z=="True" || z=="T" || z=="t" || z==1 || z=="1", TRUE, FALSE) # standardize z 
+  if( is.integer(y) ) { # y is integer
+    if( y>length(df) || y<1 ) {
+      print("Invalid column number")
+      return(NULL)
+    }
+    if(z) { df1 = data.frame( scale(df[y]) ) } else { df1 = df[y] } # save y-var in df1
+    df = df[-y] # remove y-variable in df
+  } else { # y is not integer, so interpret as name
+    if(z) { df1 = data.frame( scale( df[names(df) == y] ) ) } else { df1 = df[names(df) == y] }
+    df = df[names(df) != y]
+  }
+  if( length(df1)<1 ) {
+    print("Variable name not found in data.frame")
+    return(NULL)
+  }
+  df2 = PCAxform(df,z)
+  df1 = data.frame(df1,df2)
+  return(df1)
+}
+# Sample 
+# USArrests.z.pcr = PCRxform(USArrests,3,TRUE) # OR
+# USArrests.z.pcr = PCRxform(USArrests,"UrbanPop",TRUE) 
+# summary(USArrests.z.pcr)
+
+```
+
+**Question 1: Import the dataset into R. Check for basic missing values and normality.**
+
+```{r question1, echo=TRUE}
+cardio.org = read.csv('cardio_train.csv')
+str(cardio.org)
+summary(cardio.org)
+head(cardio.org)
+
+#checking for any missing values in the whole df
+any(is.na(cardio.org))
+#no missing values found in the df, thus no need to check by columns
+
+#checking for normality
+
+
+
+hist(cardio.org$age)
+qqnorm(cardio.org$age) 
+qqline(cardio.org$age)
+
+
+hist(cardio.org$height)
+qqnorm(cardio.org$height) 
+qqline(cardio.org$height)
+
+
+hist(cardio.org$weight)
+qqnorm(cardio.org$weight) 
+qqline(cardio.org$weight)
+
+
+hist(cardio.org$ap_hi)
+qqnorm(cardio.org$ap_hi) 
+qqline(cardio.org$ap_hi)
+
+
+hist(cardio.org$ap_lo)
+qqnorm(cardio.org$ap_lo) 
+qqline(cardio.org$ap_lo)
+
+
+```
+
+The deviation of the points for calories from the normal line is minimal within one standard deviation. So it could be considered slighly normal. Other variables are not normal.
+
+**Question 2: For PCA, which variables will you drop? Get a cleaned up dataset, and call it dfpca.**
+
+```{r cleanup, echo=TRUE}
+dfcardio<-subset(cardio.org, select = c("age","gender","height","weight","ap_hi","ap_lo","cholesterol","gluc", "smoke", "alco", "active"))
+#Find the correlation matrix
+cor(dfcardio)
+#And the covariance matrix
+cov(dfcardio)
+```
+
+Removed brand[factor] and id[int] from dfpizza to form dfpca.
+
+**Question 3: As we did in class, try both using raw data and centering, obtain the PCA components in the two scenarios.** 
+
+```{r q3, echo=TRUE}
+dfpca.scaled = data.frame(scale(dfpca))
+print("Lets look at the Correlation and Covariance matrix of scaled dataframe:")
+#And the correlation matrix
+cor(dfpca.scaled)
+#And the covariance matrix
+cov(dfpca.scaled)
+
+print("PCA for both centered(i.e. scaled) and raw data:")
+pr.out =prcomp(dfpca, scale =TRUE) # center=TRUE is the default
+pr.out.nc =prcomp(dfpca, scale =FALSE) # this is centered, un-normalized data, just for comparison.
+#Here are the "loading" vector for the PCA components 
+
+cat("\n1. PCA for centered(i.e. scaled) data.\n")
+summary(pr.out)
+pr.out$rotation
+
+cat("\n2. PCA for raw data.\n")
+summary(pr.out.nc)
+pr.out.nc$rotation
+```
+
+**Question 4: How many components are needed to capture 80% of the variance in each case?**
+
+```{r q4, echo=TRUE}
+pr.out.var<-pr.out$sdev^2
+pr.out.var.per<-round(pr.out.var/sum(pr.out.var)*100,1)
+barplot(pr.out.var.per,main = "Scree Plot", xlab = "Principal Components", ylab = "Variation")
+pve <- pr.out.var/sum(pr.out.var)
+plot(cumsum(pve), main = "Cumulative Variation", xlab="Principal Component (standardized)", ylab ="Cumulative Proportion of Variance Explained",ylim=c(0,1),type="b")
+cat("\nPrincipal Component 1 and 2 captures greater than 80% of the variation as suggested by both the graphs above.\n")
+
+
+```
+
+**Question 5: Make a plot between PC1 and PC2, again for the two cases.**
+
+```{r pcplots, echo=TRUE}
+biplot(pr.out,1:2, scale =0)
+biplot(pr.out.nc,1:2, scale =0)
+```
+
+**Question 6: Before we try PCR, let us perform the basic LM regression the old-fashion way. Build the full model out of the dfpca dataframe with cal as the response variable. What is the R2 value? What are the VIFs? Is this a good model for cal? Afterall, is the cal data calculated from some nutrient’s formula, or are they determined experimentally? What does your analysis suggest?**
+
+```{r q6, echo=TRUE}
+library(faraway)
+cat("\nLinear Regression Model:\n")
+lmreg<-lm(cal~.,dfpca)
+summary(lmreg)
+cat("\nVIF of the Linear Regression Model:\n")
+vif(lmreg)
+#dfpca<-subset(dfpizza, select = c("mois","prot","fat","ash","sodium","carb","cal"))
+
+```
+R-squared value is 0.999. 
+
+If the VIF value for a predictor is more than $\frac{1}{1-R^{2}}$ i.e. $\frac{1}{1-0.999}$ = 1000 then that predictor is more related to the other predictors than it is to the response. Consequtively moisture, protein, fat and carbohydrates are not good predictors. 
+
+High VIF value is suggesting that calories is not derived from the predictors, so it is not calculated from nutrient formula but experimental.
+
+Not a good model.
+
+**Question 7: Now continue with the dfpca dataframe, build the PCR model, again using both raw and centered versions. Comment on the results in terms of the effect on R2 with different number of components used.**
+
+```{r q7, echo=TRUE}
+#install.packages("pls")
+loadPkg("pls")
+#install.packages("mice")
+loadPkg("mice")
+#install.packages("ISLR")
+loadPkg("ISLR")
+#Again we want to scale our data and "CV" stands for cross validation, which is defaulted to RMSE, using our pizza data 
+
+scaled.pcr.fit=pcr(cal~.,data=dfpca,scale=TRUE,validation ="CV")
+unscaled.pcr.fit=pcr(cal~.,data=dfpca,scale=FALSE,validation ="CV")
+
+cat("\nScaled PCR fit:\n\n")
+summary(scaled.pcr.fit)
+
+
+cat("\nUn-Scaled PCR fit:\n\n")
+summary(unscaled.pcr.fit)
+
+cat("\nNew values of New Variables calculated....\n\n")
+dfpca.scaled.pc.v3 = PCRxform(dfpca.scaled,"cal",TRUE) 
+head(dfpca.scaled.pc.v3)
+
+cat("\nLM regression using all Principal component from scaled actual variables:\n\n")
+scaled.pc.fit.lm = lm(cal~., data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm)
+summary(scaled.pc.fit.lm)
+
+cat("\nLM regression using Principal component 1 to 5 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v2 = lm(cal~PC1+PC2+PC3+PC4+PC5, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v2)
+summary(scaled.pc.fit.lm.v2)
+
+cat("\nLM regression using Principal component 1 to 4 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v3 = lm(cal~PC1+PC2+PC3+PC4, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v3)
+summary(scaled.pc.fit.lm.v3)
+
+cat("\nLM regression using Principal component 1 to 3 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v4 = lm(cal~PC1+PC2+PC3, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v4)
+summary(scaled.pc.fit.lm.v4)
+
+cat("\nLM regression using Principal component 1 and 2 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v5 = lm(cal~PC1+PC2, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v5)
+summary(scaled.pc.fit.lm.v5)
+
+cat("\nLM regression using only Principal component 1 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v6 = lm(cal~PC1, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v6)
+summary(scaled.pc.fit.lm.v6)
+```
+The model where we considered all principal component had $R^2$ value of 0.999, removing the fifth component and then further removing the 4th component didnt make any difference in the $R^2$ value. However removing PC4 reduced $R^2$ by 0.021, removing PC3 caused $R^2$ to be reduced by 0.017. A drastic change can be seen when we build the model only with PC1 and remove PC2. THe change is that the value of $R^2$ drops down to 0.117 meaning a reduction of 0.844. From intuition and lookinh at the reductions lets test by building the following three models and observe $R^2$ values:
+
+1. PC2 and PC1
+2. PC2 and PC4
+3. PC2 and PC3
+
+```{r testing, echo=TRUE}
+
+cat("\nLM regression using Principal component 2 and 1 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v7 = lm(cal~PC2+PC1, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v7)
+summary(scaled.pc.fit.lm.v7)
+
+cat("\nLM regression using Principal component 2 and 4 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v8 = lm(cal~PC2+PC4, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v8)
+summary(scaled.pc.fit.lm.v8)
+
+cat("\nLM regression using Principal component 2 and 3 from scaled actual variables:\n\n")
+scaled.pc.fit.lm.v9 = lm(cal~PC2+PC3, data=dfpca.scaled.pc.v3)
+vif(scaled.pc.fit.lm.v9)
+summary(scaled.pc.fit.lm.v9)
+
+
+```
+From the above results we can conclude that PC2 and PC1 accounst for most of the variation in the model and thus assisting in builing a model with reduced dimension giving almost the same better results. 
+
+**Question 8: In this exercise, do you feel that PCR is a effective tool to build a model with dimension reduction in mind? If so, is the centered-version preferred?**
+
+Building a model with variables having high VIF values is not a practice. Thus centering or standardizing to compute principal components would be the way to go. If we are looking to reduce dimensions then PCA is definetly an effective tool. Also keeping all the principal components also can be computationally expensive so we reduce down to only the principal components which covers most of the variation with good $R^2$ value.   
