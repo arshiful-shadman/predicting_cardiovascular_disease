@@ -1,0 +1,300 @@
+---
+title: "Project 2"
+author: "TBD"
+date: "November 25, 2019"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+---
+
+```{r setup}
+# some of common options (and the defaults) are: 
+# include=T, eval=T, echo=T, results='hide'/'asis',..., collapse=F, warning=T, message=T, error=T, cache=T, fig.width=6, fig.height=4, fig.dim=c(6,4) #inches, fig.align='left'/'center','right', 
+#knitr::opts_chunk$set(include = F)
+knitr::opts_chunk$set(echo = F)
+options(scientific=T, digits = 3) 
+# options(scipen=9, digits = 3) 
+# âscipenâ: integer. A penalty to be applied when deciding to print numeric values in fixed or exponential notation.  Positive values bias towards fixed and negative towards scientific notation: fixed notation will be preferred unless it is more than âscipenâ digits wider.
+# use scipen=999 to prevent scientific notation at all times
+```
+
+```{r basicfcn}
+# can add quietly=T option to the require() function
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+```
+
+## Import cardio dataset and clean the dataset
+```{r, echo=F}
+cardio = read.csv('cardio.csv')
+str(cardio)
+summary(cardio)
+```
+
+
+```{r,echo=F}
+#Remove id column
+cardio = cardio[,-1]
+#Remove negative values from ap_hi, ap_lo, and subset data with ap_hi and ap_lo less than 500.
+cardio_clean = subset(cardio, ap_hi > 0 & ap_hi < 500 & ap_lo > 0 & ap_lo < 500)
+
+#Convert age (days) into age(years)
+cardio_clean$age = round(cardio_clean$age / 365)
+```
+
+## Correlation matrix
+```{r, echo=F}
+loadPkg("corrplot")
+
+cor_matrix = cor(cardio_clean)
+cor_matrix
+
+corrplot(cor_matrix, method="pie")
+
+#loadPkg("PerformanceAnalytics")
+#cor_matrix_chart = chart.Correlation(cardio_clean, histogram=TRUE)
+```
+
+```{r corrplot1,include=T, warning=F, echo=F}
+
+corrplot.mixed(cor_matrix)
+```
+
+
+```{r, echo=F}
+#Convert some variables into factors
+# cardio_clean$gender = as.factor(cardio_clean$gender)
+# cardio_clean$cholesterol = as.factor(cardio_clean$cholesterol)
+# cardio_clean$gluc = as.factor(cardio_clean$gluc)
+# cardio_clean$smoke = as.factor(cardio_clean$smoke)
+# cardio_clean$alco = as.factor(cardio_clean$alco)
+# cardio_clean$active = as.factor(cardio_clean$active)
+cardio_clean$cardio = as.factor(cardio_clean$cardio)
+
+#Let's look at the structure and summary of the cleaned dataset
+str(cardio_clean)
+summary(cardio_clean)
+```
+
+## Decision tree 
+
+Split data into 70% train set and 30% test set
+
+```{r, echo=F}
+set.seed(1)
+cardio_train_row = sample(1:nrow(cardio_clean), round(0.7*nrow(cardio_clean),0), replace = FALSE)
+
+cardio_training = cardio_clean[cardio_train_row, ]
+cardio_test = cardio_clean[-cardio_train_row, ]
+# Set y labels for train and test sets
+#y_trainingLabel = cardio_clean[cardio_train_row, 12]
+#y_testLabel = cardio[-cardio_train_row, 12]
+nrow(cardio_training)
+nrow(cardio_test)
+```
+
+```{r, echo=F}
+loadPkg("rpart") # Classification trees, rpart(formula, data=, method=,control=) 
+cardiofit <- rpart(cardio ~ .,
+  	method = 'class', data=cardio_training, control = rpart.control(minsplit = 6000, minbucket = 100, cp=0.001))
+
+printcp(cardiofit) 
+plotcp(cardiofit) 
+summary(cardiofit) 
+
+# plot tree 
+plot(cardiofit, uniform=TRUE, main="Classification Tree for Cardio Disease")
+text(cardiofit, use.n=TRUE, all=TRUE, cex=.8)
+```
+
+```{r}
+# Apply the decision tree model on test set
+cardio_test$pred <- predict(object = cardiofit, newdata = cardio_test, type = "class")
+
+```
+
+Decision Tree Evaluation
+```{r, echo=F}
+loadPkg("caret") 
+cm = confusionMatrix( data = cardio_test$pred, reference = cardio_test$cardio )
+cm
+#cm
+print('Overall: ')
+cm$overall
+print('Class: ')
+cm$byClass
+```
+
+Overall Accuracy is 72.1%. 
+
+```{r fancyplot, echo=F}
+loadPkg("rpart.plot")
+rpart.plot(cardiofit)
+loadPkg("rattle") 
+fancyRpartPlot(cardiofit)
+```
+
+
+## KNN
+```{r, echo=F}
+#arshiful 
+#cardio.org = read.csv('cardio.csv')# imported as cardio already
+#str(cardio.org)
+#summary(cardio.org)
+#head(cardio.org)
+```
+
+
+```{r, echo=F}
+library(modelr)
+#cardio.org$age<-floor(cardio.org$age/365.25)# done by trinh 
+#head(cardio.org)
+
+#cardio.org$cardio<-as.factor(cardio.org$cardio) # done by trinh
+
+cardio_clean$cholesterol<-as.factor(cardio_clean$cholesterol)
+#constructing three binary variables for cholesterol using OHE (one hot encoding)
+cholesterol_binary<-model_matrix(cardio_clean,cardio~cholesterol-1)
+head(cholesterol_binary,10)
+cardio.new<-cbind(cardio_clean,cholesterol_binary)
+head(cardio.new)
+
+
+cardio_clean$gluc<-as.factor(cardio_clean$gluc)
+#constructing three binary variables for glucose using OHE
+gluc_binary<-model_matrix(cardio_clean,cardio~gluc-1)
+head(gluc_binary,10)
+cardio.new2<-cbind(cardio.new,gluc_binary)
+head(cardio.new2,10)
+
+write.csv(cardio.new2,'C:\\Users\\HP\\Desktop\\new.csv', row.names = FALSE)
+
+```
+
+Splitting data into 7:3 ratio
+```{r}
+set.seed(1)
+#just making a copy to use in scaling
+cardio.new2.scaled<-data.frame(cardio.new2)
+#cardio.new2.scaled2<-data.frame(cardio.new2)
+
+#remove later if required
+#cardio.new2.scaled$cholesterol <-as.numeric(cardio.new2.scaled$cholesterol) 
+#cardio.new2.scaled$gluc <-as.numeric(cardio.new2.scaled$gluc)
+
+
+#need to scale age, height, weight, ap_hi, ap_lo
+cardio.new2.scaled$age <- scale(cardio.new2.scaled$age, center = TRUE, scale = TRUE)
+cardio.new2.scaled$height <- scale(cardio.new2.scaled$height, center = TRUE, scale = TRUE)
+cardio.new2.scaled$weight <- scale(cardio.new2.scaled$weight, center = TRUE, scale = TRUE)
+cardio.new2.scaled$ap_hi <- scale(cardio.new2.scaled$ap_hi, center = TRUE, scale = TRUE)
+cardio.new2.scaled$ap_lo <- scale(cardio.new2.scaled$ap_lo, center = TRUE, scale = TRUE)
+
+
+
+###experimenting
+#cardio.new2.scaled2$age <- scale(cardio.new2.scaled2$age, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$height <- scale(cardio.new2.scaled2$height, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$weight <- scale(cardio.new2.scaled2$weight, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$ap_hi <- scale(cardio.new2.scaled2$ap_hi, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$ap_lo <- scale(cardio.new2.scaled2$ap_lo, center = TRUE, scale = TRUE)
+
+#cardio.new2.scaled2$gender <- scale(cardio.new2.scaled2$gender, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$smoke <- scale(cardio.new2.scaled2$smoke, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$alco <- scale(cardio.new2.scaled2$alco, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$active <- scale(cardio.new2.scaled2$active, center = TRUE, scale = TRUE)
+
+#cardio.new2.scaled2$cholesterol1 <- scale(cardio.new2.scaled2$cholesterol1, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$cholesterol2 <- scale(cardio.new2.scaled2$cholesterol2, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$cholesterol3 <- scale(cardio.new2.scaled2$cholesterol3, center = TRUE, scale = TRUE)
+
+#cardio.new2.scaled2$gluc1 <- scale(cardio.new2.scaled2$gluc1, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$gluc2 <- scale(cardio.new2.scaled2$gluc2, center = TRUE, scale = TRUE)
+#cardio.new2.scaled2$gluc3 <- scale(cardio.new2.scaled2$gluc3, center = TRUE, scale = TRUE)
+###
+
+#seperate test and train
+cardio_data_train_rows=sample(1:nrow(cardio.new2.scaled),round(0.8*nrow(cardio.new2.scaled),0),replace=FALSE)       
+cardio_data_train=cardio.new2.scaled[cardio_data_train_rows,]
+cardio_data_test=cardio.new2.scaled[-cardio_data_train_rows,]
+
+
+#seperate test and train
+#cardio_data_train_rows2=sample(1:nrow(cardio.new2.scaled2),round(0.7*nrow(cardio.new2.scaled2),0),replace=FALSE)       
+#cardio_data_train2=cardio.new2.scaled2[cardio_data_train_rows2,]
+#cardio_data_test2=cardio.new2.scaled2[-cardio_data_train_rows2,]
+
+
+#seperate x from test and train , y from test and train
+#xtrain<-subset(cardio_data_train, select=-c(id,cholesterol,gluc,cardio))
+#xtest<-subset(cardio_data_test, select=-c(id,cholesterol,gluc,cardio))
+
+
+#ytrain<-subset(cardio_data_train, select=c(cardio))
+#ytest<-subset(cardio_data_test, select=c(cardio))
+
+#seperate x from test and train , y from test and train
+xtrain<-cardio_data_train[,-c(7,8,12)]
+xtest<-cardio_data_test[,-c(7,8,12)]
+
+
+ytrain<-cardio_data_train[,c(12)]
+ytest<-cardio_data_test[,c(12)]
+
+
+#xtrain2<-cardio_data_train2[,-c(7,8,12)]
+#xtest2<-cardio_data_test2[,-c(7,8,12)]
+
+
+#ytrain2<-cardio_data_train2[,c(12)]
+#ytest2<-cardio_data_test2[,c(12)]
+
+```
+
+
+```{r}
+library("gmodels")
+library("FNN")
+
+kVsAcc<-data.frame(K=integer(),Accuracy=double())
+colnames(kVsAcc)<-c("K", "Accuracy")
+
+for( K in 3:30 ) {
+  print(paste("--------------------------------------------------------" ))
+  print(paste("-------------------- When k = ",K," ----------------------" )) 
+  
+  knn_model <- knn(train = xtrain, test = xtest, cl=ytrain, k=K) 
+  ct <- CrossTable(ytest, knn_model, prop.chisq = FALSE)
+  acc = 0 
+  for(i in 1:dim(ct$prop.tbl)[1]) { 
+    acc = acc + ct$prop.tbl[i,i] 
+  }
+  print(paste("Accuracy = ",acc)) 
+  
+  kVsAcc[nrow(kVsAcc) + 1,]=c(K,acc)
+  
+  print(paste("--------------------------------------------------------" ))
+  print(paste("--------------------------------------------------------" ))
+  print(paste("                                                        " ))
+  print(paste("                                                        " ))
+  knn_model = NULL  
+}
+
+
+library("ggplot2")
+ggplot(kVsAcc, aes(x = kVsAcc$K, y = kVsAcc$Accuracy)) + 
+  geom_line(color = "blue", size = 1) +
+  geom_point(size = 2)
+
+
+#knn_model2 <- knn(train = xtrain2, test = xtest2, cl=ytrain2, k=20) 
+#  ct <- CrossTable(ytest2, knn_model2, prop.chisq = FALSE)
+#  ct
+```
+
+```{r}
+
+```
+
