@@ -1,0 +1,170 @@
+---
+title: "Project 2"
+author: "TBD"
+date: "November 24, 2019"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r basicfcn, include=F}
+# can add quietly=T option to the require() function
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+```
+
+
+### Import stroke data train and test sets
+```{r, echo=F}
+train_data = read.csv('train_2v.csv')
+str(train_data)
+summary(train_data)
+test_data = read.csv('test_2v.csv')
+str(test_data)
+summary(test_data)
+```
+
+There are some NAs in bmi, smoking_status, and gender in both train and test sets. Let's remove them.
+
+```{r, echo=F}
+# Remove NAs from bmi, smoking_status, and gender from train set
+train_cdata = subset(train_data, !is.na(bmi) & smoking_status != '' & gender != 'Other')
+train_cdata$gender = as.factor(as.character(train_cdata$gender))
+train_cdata$smoking_status = as.factor(as.character(train_cdata$smoking_status))
+str(train_cdata)
+summary(train_cdata)
+```
+
+```{r, echo=F}
+# Remove NAs from bmi, smoking_status, and gender from test set
+test_cdata = subset(test_data, !is.na(bmi) & smoking_status != '' & gender != 'Other')
+test_cdata$gender = as.factor(as.character(test_cdata$gender))
+test_cdata$smoking_status = as.factor(as.character(test_cdata$smoking_status))
+str(test_cdata)
+summary(test_cdata)
+```
+
+
+
+
+###Scaling training data, age, avg_glucose level , bmi
+
+```{r second, echo=TRUE}
+train_cdata.scaled <- train_cdata
+test_cdata.scaled <- test_cdata
+
+train_cdata.scaled[3] <- scale(train_cdata.scaled[3], center = TRUE, scale = TRUE) 
+train_cdata.scaled[9] <- scale(train_cdata.scaled[9], center = TRUE, scale = TRUE) 
+train_cdata.scaled[10] <- scale(train_cdata.scaled[10], center = TRUE, scale = TRUE) 
+
+
+gp<-runif(nrow(train_cdata.scaled))
+train_cdata.scaled.shuffled<-train_cdata.scaled[order(gp),]
+
+#nrow(train_cdata.scaled.shuffled)==29065
+#round(0.7*nrow(train_cdata.scaled.shuffled))==20346
+xtrain<-train_cdata.scaled.shuffled[1:20346,c(3,9,10)]
+ytrain<-train_cdata.scaled.shuffled[1:20346,12]
+xtest<-train_cdata.scaled.shuffled[20347:29065,c(3,9,10)]
+ytest<-train_cdata.scaled.shuffled[20347:29065,12]
+
+test_cdata.scaled[3] <- scale(test_cdata.scaled[3], center = TRUE, scale = TRUE)
+test_cdata.scaled[9] <- scale(test_cdata.scaled[9], center = TRUE, scale = TRUE)  
+test_cdata.scaled[10] <- scale(test_cdata.scaled[10], center = TRUE, scale = TRUE)  
+
+```
+
+```{r}
+knn_acc = function(pred,true_value){
+  
+  kNN_res = table(pred, true_value)
+ 
+  # Calculate the accuracy rate by dividing the correct classifications
+  # by the total number of classifications.
+  kNN_acc = sum(kNN_res[row(kNN_res) == col(kNN_res)]) / sum(kNN_res)
+  kNN_acc
+}
+```
+
+
+### Ran a loop through some possible k values to build models and calculate accuracy. Plotted a graph of K against Accuracy to see the best value of K.
+
+```{r third, echo=FALSE}
+library("gmodels")
+
+kVsAcc<-data.frame(K=integer(),Accuracy=double())
+colnames(kVsAcc)<-c("K", "Accuracy")
+
+for( K in 5:20 ) {
+  print(paste("                                                        " ))
+  print(paste("                                                        " ))
+  print(paste("--------------------------------------------------------" ))
+  print(paste("-------------------- When k = ",K," ----------------------" )) 
+  
+  knn_model <- knn(train = xtrain, test = xtest, cl=ytrain, k=K) 
+  ct <- CrossTable(ytest, knn_model, prop.t=TRUE)
+  acc = 0 
+  #for(i in 1:dim(ct$prop.tbl)[1]) { 
+  #  if(exists("ct$prop.tbl[i,i]"))
+  #  acc = acc + ct$prop.tbl[i,i] 
+  #}
+  
+  acc=knn_acc(knn_model,ytest)
+  
+  print(paste("Accuracy = ",acc)) 
+  
+  kVsAcc[nrow(kVsAcc) + 1,]=c(K,acc)
+  
+  print(paste("--------------------------------------------------------" ))
+  print(paste("--------------------------------------------------------" ))
+  print(paste("                                                        " ))
+  print(paste("                                                        " ))
+  knn_model = NULL  
+}
+
+
+loadPkg("ggplot2")
+ggplot(kVsAcc, aes(x = kVsAcc$K, y = kVsAcc$Accuracy)) + 
+  geom_line(color = "blue", size = 1) +
+  geom_point(size = 2)
+
+
+```
+
+### Ran individual K values
+
+```{r third, echo=TRUE}
+library("gmodels")
+
+
+
+
+  
+  knn_model4 <- knn(train = xtrain, test = xtest, cl=ytrain, k=4) 
+  ct4 <- CrossTable(ytest, knn_model4, prop.chisq = FALSE)
+
+  knn_model5 <- knn(train = xtrain, test = xtest, cl=ytrain, k=5) 
+  ct5 <- CrossTable(ytest, knn_model5, prop.chisq = FALSE)
+
+    knn_model6 <- knn(train = xtrain, test = xtest, cl=ytrain, k=6) 
+  ct6 <- CrossTable(ytest, knn_model6, prop.chisq = FALSE)
+
+    knn_model7 <- knn(train = xtrain, test = xtest, cl=ytrain, k=7) 
+  ct7 <- CrossTable(ytest, knn_model7, prop.chisq = FALSE)
+
+    knn_model8 <- knn(train = xtrain, test = xtest, cl=ytrain, k=8) 
+  ct8 <- CrossTable(ytest, knn_model8, prop.chisq = FALSE)
+
+    knn_model9 <- knn(train = xtrain, test = xtest, cl=ytrain, k=9) 
+  ct9 <- CrossTable(ytest, knn_model9, prop.chisq = FALSE)
+
+    knn_model10 <- knn(train = xtrain, test = xtest, cl=ytrain, k=10) 
+  ct10 <- CrossTable(ytest, knn_model10, prop.chisq = FALSE)
+
+
+```
