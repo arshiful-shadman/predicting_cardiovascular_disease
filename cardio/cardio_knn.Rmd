@@ -1,0 +1,130 @@
+---
+title: "Project 2"
+author: "TBD"
+date: "November 24, 2019"
+output:
+  html_document:
+    code_folding: hide
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r basicfcn, include=F}
+# can add quietly=T option to the require() function
+loadPkg = function(x) { if (!require(x,character.only=T, quietly =T)) { install.packages(x,dep=T,repos="http://cran.us.r-project.org"); if(!require(x,character.only=T)) stop("Package not found") } }
+```
+
+
+### Import cardio
+```{r, echo=F}
+cardio.org = read.csv('cardio_train.csv')
+str(cardio.org)
+summary(cardio.org)
+head(cardio.org)
+```
+
+Doing some preprocessing:
+converting days to years for convinience
+constructing three binary variables for cholesterol
+same for glucose
+
+```{r, echo=F}
+library(modelr)
+cardio.org$age<-floor(cardio.org$age/365.25)
+#head(cardio.org)
+
+#cardio.org$cardio<-as.factor(cardio.org$cardio)
+
+cardio.org$cholesterol<-as.factor(cardio.org$cholesterol)
+cholesterol_binary<-model_matrix(cardio.org,cardio~cholesterol-1)
+#head(cholesterol_binary,10)
+cardio.new<-cbind(cardio.org,cholesterol_binary)
+#head(cardio.new)
+
+
+cardio.org$gluc<-as.factor(cardio.org$gluc)
+gluc_binary<-model_matrix(cardio.org,cardio~gluc-1)
+#head(gluc_binary,10)
+cardio.new2<-cbind(cardio.new,gluc_binary)
+head(cardio.new2,10)
+
+```
+
+Splitting data into 7:3 ratio
+```{r}
+set.seed(1)
+#just making a copy to use in scaling
+cardio.new2.scaled<-data.frame(cardio.new2)
+
+
+#need to scale age, height, weight, ap_hi, ap_lo
+cardio.new2.scaled$age <- scale(cardio.new2.scaled$age, center = TRUE, scale = TRUE)
+cardio.new2.scaled$height <- scale(cardio.new2.scaled$height, center = TRUE, scale = TRUE)
+cardio.new2.scaled$weight <- scale(cardio.new2.scaled$weight, center = TRUE, scale = TRUE)
+cardio.new2.scaled$ap_hi <- scale(cardio.new2.scaled$ap_hi, center = TRUE, scale = TRUE)
+cardio.new2.scaled$ap_lo <- scale(cardio.new2.scaled$ap_lo, center = TRUE, scale = TRUE)
+
+
+#seperate test and train
+cardio_data_train_rows=sample(1:nrow(cardio.new2.scaled),round(0.7*nrow(cardio.new2.scaled),0),replace=FALSE)       
+cardio_data_train=cardio.new2.scaled[cardio_data_train_rows,]
+cardio_data_test=cardio.new2.scaled[-cardio_data_train_rows,]
+
+#seperate x from test and train , y from test and train
+#xtrain<-subset(cardio_data_train, select=-c(id,cholesterol,gluc,cardio))
+#xtest<-subset(cardio_data_test, select=-c(id,cholesterol,gluc,cardio))
+
+
+#ytrain<-subset(cardio_data_train, select=c(cardio))
+#ytest<-subset(cardio_data_test, select=c(cardio))
+
+#seperate x from test and train , y from test and train
+xtrain<-cardio_data_train[,-c(1,8,9,12)]
+xtest<-cardio_data_test[,-c(1,8,9,12)]
+
+
+ytrain<-cardio_data_train[,c(12)]
+ytest<-cardio_data_test[,c(12)]
+
+```
+
+
+```{r}
+library("gmodels")
+library("FNN")
+
+kVsAcc<-data.frame(K=integer(),Accuracy=double())
+colnames(kVsAcc)<-c("K", "Accuracy")
+
+for( K in 34:50 ) {
+  print(paste("--------------------------------------------------------" ))
+  print(paste("-------------------- When k = ",K," ----------------------" )) 
+  
+  knn_model <- knn(train = xtrain, test = xtest, cl=ytrain, k=K) 
+  ct <- CrossTable(ytest, knn_model, prop.chisq = FALSE)
+  acc = 0 
+  for(i in 1:dim(ct$prop.tbl)[1]) { 
+    acc = acc + ct$prop.tbl[i,i] 
+  }
+  print(paste("Accuracy = ",acc)) 
+  
+  kVsAcc[nrow(kVsAcc) + 1,]=c(K,acc)
+  
+  print(paste("--------------------------------------------------------" ))
+  print(paste("--------------------------------------------------------" ))
+  print(paste("                                                        " ))
+  print(paste("                                                        " ))
+  knn_model = NULL  
+}
+
+
+library("ggplot2")
+ggplot(kVsAcc, aes(x = kVsAcc$K, y = kVsAcc$Accuracy)) + 
+  geom_line(color = "blue", size = 1) +
+  geom_point(size = 2)
+```
+
